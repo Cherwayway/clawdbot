@@ -76,7 +76,7 @@ import { prepareSessionManagerForRun } from "../session-manager-init.js";
 import { buildEmbeddedSystemPrompt, createSystemPromptOverride } from "../system-prompt.js";
 import { splitSdkTools } from "../tool-split.js";
 import { toClientToolDefinitions } from "../../pi-tool-definition-adapter.js";
-import { buildSystemPromptParams } from "../../system-prompt-params.js";
+import { buildSystemPromptParams, isShellGatewayMode } from "../../system-prompt-params.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
 import { resolveSandboxRuntimeStatus } from "../../sandbox/runtime-status.js";
 import { buildTtsSystemPromptHint } from "../../../tts/tts.js";
@@ -346,6 +346,7 @@ export async function runEmbeddedAttempt(
       workspaceNotes,
       reactionGuidance,
       promptMode,
+      shellGatewayMode: isShellGatewayMode(),
       runtimeInfo,
       messageToolHints,
       sandboxInfo,

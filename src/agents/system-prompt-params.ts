@@ -103,3 +103,11 @@ function findGitRoot(startDir: string): string | null {
   }
   return null;
 }
+
+/**
+ * Check if running inside Shell Gateway (cloud-hosted Telegram interface).
+ * Set CLAWDBOT_SHELL_GATEWAY=1 to enable Shell Gateway mode.
+ */
+export function isShellGatewayMode(): boolean {
+  return process.env.CLAWDBOT_SHELL_GATEWAY === "1";
+}

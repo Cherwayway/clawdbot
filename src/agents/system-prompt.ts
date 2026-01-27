@@ -126,6 +126,39 @@ function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readT
   ];
 }
 
+function buildShellGatewaySection(enabled: boolean): string[] {
+  if (!enabled) return [];
+  return [
+    "## Shell Gateway Environment",
+    "You are running inside Shell Gateway, a cloud-hosted Telegram bot powered by Clawdbot.",
+    "",
+    "**Running Mode:** `--local` (embedded, no Gateway daemon)",
+    "**Channel:** Telegram only",
+    "**Hosting:** Modal.com cloud sandbox",
+    "",
+    "### Scheduled Tasks (Cron)",
+    "To set reminders or recurring tasks, use the `cron` tool.",
+    "Shell Gateway syncs cron jobs and executes them even when the sandbox is sleeping.",
+    "",
+    "**Natural language examples:**",
+    '- "Remind me in 30 minutes to stretch"',
+    '- "Every morning at 8am, check my emails"',
+    '- "At 5pm today, remind me to submit the report"',
+    "",
+    "**CLI examples (advanced):**",
+    "```",
+    'cron add --name "Break time" --at "30m" --session main --system-event "Time for a break!" --wake now',
+    'cron add --name "Daily summary" --cron "0 8 * * *" --tz "Asia/Shanghai" --session isolated --message "Summarize my day"',
+    "```",
+    "",
+    "### What's Different",
+    "- No `clawdbot gateway` commands (no daemon to control)",
+    "- Use Telegram `/status` and `/cron` commands for info",
+    "- Sandbox may hibernate when idle (cron still runs on schedule)",
+    "",
+  ];
+}
+
 export function buildAgentSystemPrompt(params: {
   workspaceDir: string;
   defaultThinkLevel?: ThinkLevel;
@@ -147,6 +180,8 @@ export function buildAgentSystemPrompt(params: {
   ttsHint?: string;
   /** Controls which hardcoded sections to include. Defaults to "full". */
   promptMode?: PromptMode;
+  /** Whether running inside Shell Gateway (cloud-hosted Telegram interface). */
+  shellGatewayMode?: boolean;
   runtimeInfo?: {
     agentId?: string;
     host?: string;
@@ -372,6 +407,7 @@ export function buildAgentSystemPrompt(params: {
     "- clawdbot gateway restart",
     "If unsure, ask the user to run `clawdbot help` (or `clawdbot gateway --help`) and paste the output.",
     "",
+    ...buildShellGatewaySection(params.shellGatewayMode ?? false),
     ...skillsSection,
     ...memorySection,
     // Skip self-update for subagent/none modes
