@@ -157,8 +157,10 @@ JOB SCHEMA (for add action):
 }
 
 SCHEDULE TYPES (schedule.kind):
-- "at": One-shot at absolute time
-  { "kind": "at", "atMs": <unix-ms-timestamp> }
+- "at": One-shot at specified time
+  { "kind": "at", "at": "3m" }  // Relative: 3 minutes from now (supports: 30s, 5m, 2h, 1d)
+  { "kind": "at", "at": "2026-01-27T14:00:00Z" }  // Absolute ISO time
+  { "kind": "at", "atMs": 1769500000000 }  // Absolute timestamp (NOT recommended - prefer relative)
 - "every": Recurring interval
   { "kind": "every", "everyMs": <interval-ms>, "anchorMs": <optional-start-ms> }
 - "cron": Cron expression

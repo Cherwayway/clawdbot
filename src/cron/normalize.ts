@@ -1,5 +1,6 @@
 import { sanitizeAgentId } from "../routing/session-key.js";
 import { parseAbsoluteTimeMs } from "./parse.js";
+import { parseDurationMs } from "../cli/cron-cli/shared.js";
 import { migrateLegacyCronPayload } from "./payload-migration.js";
 import type { CronJobCreate, CronJobPatch } from "./types.js";
 
@@ -22,12 +23,28 @@ function coerceSchedule(schedule: UnknownRecord) {
   const kind = typeof schedule.kind === "string" ? schedule.kind : undefined;
   const atMsRaw = schedule.atMs;
   const atRaw = schedule.at;
-  const parsedAtMs =
-    typeof atMsRaw === "string"
-      ? parseAbsoluteTimeMs(atMsRaw)
-      : typeof atRaw === "string"
-        ? parseAbsoluteTimeMs(atRaw)
-        : null;
+
+  // Parse time - support both absolute time and relative duration
+  let parsedAtMs: number | null = null;
+  if (typeof atMsRaw === "string") {
+    parsedAtMs = parseAbsoluteTimeMs(atMsRaw);
+    // If not absolute time, try parsing as relative duration
+    if (parsedAtMs === null) {
+      const durationMs = parseDurationMs(atMsRaw);
+      if (durationMs !== null) {
+        parsedAtMs = Date.now() + durationMs;
+      }
+    }
+  } else if (typeof atRaw === "string") {
+    parsedAtMs = parseAbsoluteTimeMs(atRaw);
+    // If not absolute time, try parsing as relative duration
+    if (parsedAtMs === null) {
+      const durationMs = parseDurationMs(atRaw);
+      if (durationMs !== null) {
+        parsedAtMs = Date.now() + durationMs;
+      }
+    }
+  }
 
   if (!kind) {
     if (
