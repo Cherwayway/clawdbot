@@ -1,9 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import { normalizeCronJobCreate, normalizeCronJobPatch } from "../../cron/normalize.js";
+import * as localCron from "../../cron/local-ops.js";
 import { loadConfig } from "../../config/config.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import { optionalStringEnum, stringEnum } from "../schema/typebox.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
+import { isShellGatewayMode } from "../system-prompt-params.js";
 import { type AnyAgentTool, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool, type GatewayCallOptions } from "./gateway.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
@@ -181,16 +183,33 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
       const action = readStringParam(params, "action", { required: true });
+      const useLocalMode = isShellGatewayMode();
       const gatewayOpts: GatewayCallOptions = {
         gatewayUrl: readStringParam(params, "gatewayUrl", { trim: false }),
         gatewayToken: readStringParam(params, "gatewayToken", { trim: false }),
         timeoutMs: typeof params.timeoutMs === "number" ? params.timeoutMs : undefined,
       };
 
+      // Helper to handle local cron results
+      const handleLocalResult = <T>(result: localCron.LocalCronResult<T>) => {
+        if (!result.ok) {
+          throw new Error(result.error);
+        }
+        return jsonResult(result.data);
+      };
+
       switch (action) {
         case "status":
+          if (useLocalMode) {
+            return handleLocalResult(await localCron.getStatus());
+          }
           return jsonResult(await callGatewayTool("cron.status", gatewayOpts, {}));
         case "list":
+          if (useLocalMode) {
+            return handleLocalResult(
+              await localCron.listJobs({ includeDisabled: Boolean(params.includeDisabled) }),
+            );
+          }
           return jsonResult(
             await callGatewayTool("cron.list", gatewayOpts, {
               includeDisabled: Boolean(params.includeDisabled),
@@ -222,16 +241,22 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
           ) {
             const payload = (job as { payload: { kind: string; text: string } }).payload;
             if (typeof payload.text === "string" && payload.text.trim()) {
-              const contextLines = await buildReminderContextLines({
-                agentSessionKey: opts?.agentSessionKey,
-                gatewayOpts,
-                contextMessages,
-              });
-              if (contextLines.length > 0) {
-                const baseText = stripExistingContext(payload.text);
-                payload.text = `${baseText}${REMINDER_CONTEXT_MARKER}${contextLines.join("\n")}`;
+              // Skip context lines in local mode (no Gateway to fetch history)
+              if (!useLocalMode) {
+                const contextLines = await buildReminderContextLines({
+                  agentSessionKey: opts?.agentSessionKey,
+                  gatewayOpts,
+                  contextMessages,
+                });
+                if (contextLines.length > 0) {
+                  const baseText = stripExistingContext(payload.text);
+                  payload.text = `${baseText}${REMINDER_CONTEXT_MARKER}${contextLines.join("\n")}`;
+                }
               }
             }
+          }
+          if (useLocalMode) {
+            return handleLocalResult(await localCron.addJob(job as Parameters<typeof localCron.addJob>[0]));
           }
           return jsonResult(await callGatewayTool("cron.add", gatewayOpts, job));
         }
@@ -244,6 +269,11 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
             throw new Error("patch required");
           }
           const patch = normalizeCronJobPatch(params.patch) ?? params.patch;
+          if (useLocalMode) {
+            return handleLocalResult(
+              await localCron.updateJob(id, patch as Parameters<typeof localCron.updateJob>[1]),
+            );
+          }
           return jsonResult(
             await callGatewayTool("cron.update", gatewayOpts, {
               id,
@@ -256,6 +286,9 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
           if (!id) {
             throw new Error("jobId required (id accepted for backward compatibility)");
           }
+          if (useLocalMode) {
+            return handleLocalResult(await localCron.removeJob(id));
+          }
           return jsonResult(await callGatewayTool("cron.remove", gatewayOpts, { id }));
         }
         case "run": {
@@ -263,12 +296,38 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
           if (!id) {
             throw new Error("jobId required (id accepted for backward compatibility)");
           }
+          if (useLocalMode) {
+            // In local mode, we can't actually run the job immediately (no scheduler)
+            // Just return a message indicating it will run on schedule
+            return jsonResult({
+              message: "Job will run on its scheduled time. Shell Gateway scheduler handles execution.",
+              jobId: id,
+            });
+          }
           return jsonResult(await callGatewayTool("cron.run", gatewayOpts, { id }));
         }
         case "runs": {
           const id = readStringParam(params, "jobId") ?? readStringParam(params, "id");
           if (!id) {
             throw new Error("jobId required (id accepted for backward compatibility)");
+          }
+          if (useLocalMode) {
+            // In local mode, get the job and return its state as run history
+            const result = await localCron.getJob(id);
+            if (!result.ok) throw new Error(result.error);
+            const job = result.data;
+            return jsonResult({
+              runs: job.state.lastRunAtMs
+                ? [
+                    {
+                      runAtMs: job.state.lastRunAtMs,
+                      status: job.state.lastStatus,
+                      error: job.state.lastError,
+                      durationMs: job.state.lastDurationMs,
+                    },
+                  ]
+                : [],
+            });
           }
           return jsonResult(await callGatewayTool("cron.runs", gatewayOpts, { id }));
         }
@@ -278,6 +337,14 @@ Use jobId as the canonical identifier; id is accepted for compatibility. Use con
             params.mode === "now" || params.mode === "next-heartbeat"
               ? params.mode
               : "next-heartbeat";
+          if (useLocalMode) {
+            // In local mode, wake is not supported (no Gateway to wake)
+            return jsonResult({
+              message: "Wake events are not supported in Shell Gateway mode. Use scheduled tasks instead.",
+              text,
+              mode,
+            });
+          }
           return jsonResult(
             await callGatewayTool("wake", gatewayOpts, { mode, text }, { expectFinal: false }),
           );
