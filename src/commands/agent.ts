@@ -443,6 +443,13 @@ export async function agentCommand(
             extraSystemPrompt: opts.extraSystemPrompt,
             streamParams: opts.streamParams,
             agentDir,
+            // JSONL streaming: output each block as it completes
+            onBlockReply: opts.jsonl
+              ? (payload) => {
+                  const line = JSON.stringify({ type: "block", payload });
+                  process.stdout.write(line + "\n");
+                }
+              : undefined,
             onAgentEvent: (evt) => {
               // Track lifecycle end for fallback emission below.
               if (

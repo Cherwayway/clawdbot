@@ -117,6 +117,18 @@ export async function deliverAgentCommandResult(params: {
   }
 
   const normalizedPayloads = normalizeOutboundPayloadsForJson(payloads ?? []);
+
+  // JSONL streaming mode: output final done event with meta
+  if (opts.jsonl) {
+    const doneLine = JSON.stringify({
+      type: "done",
+      payloads: normalizedPayloads,
+      meta: result.meta,
+    });
+    process.stdout.write(doneLine + "\n");
+    if (!deliver) return { payloads: normalizedPayloads, meta: result.meta };
+  }
+
   if (opts.json) {
     runtime.log(
       JSON.stringify(

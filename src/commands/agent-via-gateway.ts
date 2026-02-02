@@ -39,6 +39,7 @@ export type AgentCliOpts = {
   thinking?: string;
   verbose?: string;
   json?: boolean;
+  jsonl?: boolean;
   timeout?: string;
   deliver?: boolean;
   channel?: string;

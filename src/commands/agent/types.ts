@@ -41,6 +41,7 @@ export type AgentCommandOpts = {
   thinkingOnce?: string;
   verbose?: string;
   json?: boolean;
+  jsonl?: boolean;
   timeout?: string;
   deliver?: boolean;
   /** Override delivery target (separate from session routing). */
