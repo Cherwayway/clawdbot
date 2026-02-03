@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
 import { validateProviderConfig, resolveVoiceCallConfig, type VoiceCallConfig } from "./config.js";
 
-function createBaseConfig(
-  provider: "telnyx" | "twilio" | "plivo" | "mock",
-): VoiceCallConfig {
+function createBaseConfig(provider: "telnyx" | "twilio" | "plivo" | "mock"): VoiceCallConfig {
   return {
     enabled: true,
     provider,
@@ -19,7 +16,7 @@ function createBaseConfig(
     maxConcurrentCalls: 1,
     serve: { port: 3334, bind: "127.0.0.1", path: "/voice/webhook" },
     tailscale: { mode: "off", path: "/voice/webhook" },
-    tunnel: { provider: "none", allowNgrokFreeTier: false },
+    tunnel: { provider: "none", allowNgrokFreeTierLoopbackBypass: false },
     streaming: {
       enabled: false,
       sttProvider: "openai-realtime",

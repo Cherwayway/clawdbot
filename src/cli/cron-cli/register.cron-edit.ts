@@ -2,8 +2,8 @@ import type { Command } from "commander";
 import * as localOps from "../../cron/local-ops.js";
 import type { CronJobPatch } from "../../cron/types.js";
 import { danger } from "../../globals.js";
-import { defaultRuntime } from "../../runtime.js";
 import { sanitizeAgentId } from "../../routing/session-key.js";
+import { defaultRuntime } from "../../runtime.js";
 import { addGatewayClientOptions, callGatewayFromCli } from "../gateway-rpc.js";
 import {
   addLocalCronOptions,
@@ -24,7 +24,9 @@ const assignIf = (
   value: unknown,
   shouldAssign: boolean,
 ) => {
-  if (shouldAssign) target[key] = value;
+  if (shouldAssign) {
+    target[key] = value;
+  }
 };
 
 export function registerCronEditCommand(cron: Command) {
@@ -85,8 +87,9 @@ export function registerCronEditCommand(cron: Command) {
             const patch: CronJobPatch = {};
             if (typeof opts.name === "string") patch.name = opts.name;
             if (typeof opts.description === "string") patch.description = opts.description;
-            if (opts.enable && opts.disable)
+            if (opts.enable && opts.disable) {
               throw new Error("Choose --enable or --disable, not both");
+            }
             if (opts.enable) patch.enabled = true;
             if (opts.disable) patch.enabled = false;
             if (opts.deleteAfterRun && opts.keepAfterRun) {
@@ -94,10 +97,12 @@ export function registerCronEditCommand(cron: Command) {
             }
             if (opts.deleteAfterRun) patch.deleteAfterRun = true;
             if (opts.keepAfterRun) patch.deleteAfterRun = false;
-            if (typeof opts.session === "string")
+            if (typeof opts.session === "string") {
               patch.sessionTarget = opts.session as "main" | "isolated";
-            if (typeof opts.wake === "string")
+            }
+            if (typeof opts.wake === "string") {
               patch.wakeMode = opts.wake as "now" | "next-heartbeat";
+            }
             if (opts.agent && opts.clearAgent) {
               throw new Error("Use --agent or --clear-agent, not both");
             }
@@ -109,7 +114,9 @@ export function registerCronEditCommand(cron: Command) {
             }
 
             const scheduleChosen = [opts.at, opts.every, opts.cron].filter(Boolean).length;
-            if (scheduleChosen > 1) throw new Error("Choose at most one schedule change");
+            if (scheduleChosen > 1) {
+              throw new Error("Choose at most one schedule change");
+            }
             if (opts.at) {
               const atMs = parseAtMs(String(opts.at));
               if (!atMs) throw new Error("Invalid --at");
