@@ -1,0 +1,109 @@
+#!/bin/bash
+# widget-svd-gif - Stable Video Diffusion GIF - Image to GIF
+
+set -e
+
+WIDGET_ID="1743838672895086592"
+
+# Read config from myshell-config.json
+MYSHELL_CONFIG="/root/.clawdbot/myshell-config.json"
+if [ -f "$MYSHELL_CONFIG" ]; then
+  API_BASE=$(jq -r '.openapi.host // "https://openapi-test.myshell.fun"' "$MYSHELL_CONFIG")
+  API_KEY=$(jq -r '.openapi.request_headers["x-myshell-openapi-key"] // empty' "$MYSHELL_CONFIG")
+  USER_ID=$(jq -r '.openapi.request_headers["x-myshell-openapi-user-id"] // .myshell_user_id // 3568326' "$MYSHELL_CONFIG")
+else
+  API_BASE="${WIDGET_API_BASE:-https://openapi-test.myshell.fun}"
+  API_KEY="${WIDGET_API_KEY}"
+  USER_ID="${MYSHELL_USER_ID:-3568326}"
+fi
+
+OUTPUT=""
+INPUT_IMAGE=""
+VIDEO_LENGTH=""
+FRAMES_PER_SECOND=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -o|--output) OUTPUT="$2"; shift 2 ;;
+    --input_image) INPUT_IMAGE="$2"; shift 2 ;;
+    --video_length) VIDEO_LENGTH="$2"; shift 2 ;;
+    --frames_per_second) FRAMES_PER_SECOND="$2"; shift 2 ;;
+    -h|--help)
+      echo "Usage: widget-svd-gif [options] input_image"
+      echo ""
+      echo "Options:"
+      echo "  -o, --output FILE    Save output to file"
+      echo "  --input_image      Input image URL"
+      echo "  --video_length     svd(14 frames) or svd_xt(25 frames)"
+      echo "  --frames_per_second FPS (default 6)"
+      echo "  -h, --help           Show this help"
+      exit 0
+      ;;
+    -*) echo "Unknown option: $1"; exit 1 ;;
+    *) INPUT_IMAGE="$1"; shift ;;
+  esac
+done
+
+if [ -z "$INPUT_IMAGE" ]; then
+  echo "Error: No input_image provided"
+  echo "Usage: widget-svd-gif [options] \"input_image\""
+  exit 1
+fi
+
+if [ -z "$API_KEY" ]; then
+  echo "Error: API key not configured"
+  exit 1
+fi
+
+# Build input JSON
+INPUT_JSON=$(jq -n \
+  --arg input_image "$INPUT_IMAGE" \
+  --arg video_length "$VIDEO_LENGTH" \
+  --arg frames_per_second "$FRAMES_PER_SECOND" \
+  '{input_image: $input_image, video_length: $video_length, frames_per_second: $frames_per_second}')
+
+# Call Widget API
+RESPONSE=$(curl -s -X POST "$API_BASE/public/v2/widget/run" \
+  -H "x-myshell-openapi-key: $API_KEY" \
+  -H "x-myshell-openapi-user-id: $USER_ID" \
+  -H "x-myshell-caller-service: shellclawdbot" \
+  -H "Content-Type: application/json" \
+  --max-time 600 \
+  -d "{\"widget_id\":\"$WIDGET_ID\",\"input\":$(echo "$INPUT_JSON" | jq -Rs .)}")
+
+# Check for error
+if echo "$RESPONSE" | jq -e '.message' > /dev/null 2>&1; then
+  ERROR=$(echo "$RESPONSE" | jq -r '.message // "Unknown error"')
+  echo "Error: $ERROR" >&2
+  exit 1
+fi
+
+# Extract result
+RESULT=$(echo "$RESPONSE" | jq -r '.result // empty')
+if [ -z "$RESULT" ]; then
+  echo "Error: No result in response" >&2
+  echo "$RESPONSE" >&2
+  exit 1
+fi
+
+# Get output URL/data
+OUTPUT_DATA=$(echo "$RESULT" | jq -r '.file_url // .file_urls[0] // empty')
+if [ -z "$OUTPUT_DATA" ]; then
+  # Try alternative output formats
+  OUTPUT_DATA=$(echo "$RESULT" | jq -r 'if type == "string" then . elif .url then .url elif .file_urls[0] then .file_urls[0] else empty end')
+fi
+
+if [ -z "$OUTPUT_DATA" ]; then
+  echo "Error: No output data in result" >&2
+  echo "$RESULT" >&2
+  exit 1
+fi
+
+# Output result
+if [ -n "$OUTPUT" ]; then
+  curl -s -o "$OUTPUT" "$OUTPUT_DATA"
+  echo "$OUTPUT"
+else
+  echo "$OUTPUT_DATA"
+fi

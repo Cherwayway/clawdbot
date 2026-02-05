@@ -1,0 +1,105 @@
+#!/bin/bash
+# widget-age-transform - Age Transformation - Change face age
+
+set -e
+
+WIDGET_ID="1743838658173079552"
+
+# Read config from myshell-config.json
+MYSHELL_CONFIG="/root/.clawdbot/myshell-config.json"
+if [ -f "$MYSHELL_CONFIG" ]; then
+  API_BASE=$(jq -r '.openapi.host // "https://openapi-test.myshell.fun"' "$MYSHELL_CONFIG")
+  API_KEY=$(jq -r '.openapi.request_headers["x-myshell-openapi-key"] // empty' "$MYSHELL_CONFIG")
+  USER_ID=$(jq -r '.openapi.request_headers["x-myshell-openapi-user-id"] // .myshell_user_id // 3568326' "$MYSHELL_CONFIG")
+else
+  API_BASE="${WIDGET_API_BASE:-https://openapi-test.myshell.fun}"
+  API_KEY="${WIDGET_API_KEY}"
+  USER_ID="${MYSHELL_USER_ID:-3568326}"
+fi
+
+OUTPUT=""
+IMAGE=""
+TARGET_AGE=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -o|--output) OUTPUT="$2"; shift 2 ;;
+    --image) IMAGE="$2"; shift 2 ;;
+    --target_age) TARGET_AGE="$2"; shift 2 ;;
+    -h|--help)
+      echo "Usage: widget-age-transform [options] image"
+      echo ""
+      echo "Options:"
+      echo "  -o, --output FILE    Save output to file"
+      echo "  --image            Face image URL"
+      echo "  --target_age       Target age: default, 0, 10, 20, 30, 40, 50, 60, 70, 80"
+      echo "  -h, --help           Show this help"
+      exit 0
+      ;;
+    -*) echo "Unknown option: $1"; exit 1 ;;
+    *) IMAGE="$1"; shift ;;
+  esac
+done
+
+if [ -z "$IMAGE" ]; then
+  echo "Error: No image provided"
+  echo "Usage: widget-age-transform [options] \"image\""
+  exit 1
+fi
+
+if [ -z "$API_KEY" ]; then
+  echo "Error: API key not configured"
+  exit 1
+fi
+
+# Build input JSON
+INPUT_JSON=$(jq -n \
+  --arg image "$IMAGE" \
+  --arg target_age "$TARGET_AGE" \
+  '{image: $image, target_age: $target_age}')
+
+# Call Widget API
+RESPONSE=$(curl -s -X POST "$API_BASE/public/v2/widget/run" \
+  -H "x-myshell-openapi-key: $API_KEY" \
+  -H "x-myshell-openapi-user-id: $USER_ID" \
+  -H "x-myshell-caller-service: shellclawdbot" \
+  -H "Content-Type: application/json" \
+  --max-time 600 \
+  -d "{\"widget_id\":\"$WIDGET_ID\",\"input\":$(echo "$INPUT_JSON" | jq -Rs .)}")
+
+# Check for error
+if echo "$RESPONSE" | jq -e '.message' > /dev/null 2>&1; then
+  ERROR=$(echo "$RESPONSE" | jq -r '.message // "Unknown error"')
+  echo "Error: $ERROR" >&2
+  exit 1
+fi
+
+# Extract result
+RESULT=$(echo "$RESPONSE" | jq -r '.result // empty')
+if [ -z "$RESULT" ]; then
+  echo "Error: No result in response" >&2
+  echo "$RESPONSE" >&2
+  exit 1
+fi
+
+# Get output URL/data
+OUTPUT_DATA=$(echo "$RESULT" | jq -r '.file_url // .file_urls[0] // empty')
+if [ -z "$OUTPUT_DATA" ]; then
+  # Try alternative output formats
+  OUTPUT_DATA=$(echo "$RESULT" | jq -r 'if type == "string" then . elif .url then .url elif .file_urls[0] then .file_urls[0] else empty end')
+fi
+
+if [ -z "$OUTPUT_DATA" ]; then
+  echo "Error: No output data in result" >&2
+  echo "$RESULT" >&2
+  exit 1
+fi
+
+# Output result
+if [ -n "$OUTPUT" ]; then
+  curl -s -o "$OUTPUT" "$OUTPUT_DATA"
+  echo "$OUTPUT"
+else
+  echo "$OUTPUT_DATA"
+fi

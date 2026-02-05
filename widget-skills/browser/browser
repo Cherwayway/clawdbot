@@ -1,0 +1,2 @@
+#!/bin/bash
+exec node /opt/widget-skills/browser/browser-agent.mjs "$@"

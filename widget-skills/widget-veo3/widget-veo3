@@ -1,0 +1,124 @@
+#!/bin/bash
+# widget-veo3 - Google Veo3 Video Generation - High-quality AI video (120 battery)
+# Generate videos from text prompts using Google's Veo3 model
+
+set -e
+
+WIDGET_ID="1965802657033388032"
+
+# Read config from myshell-config.json
+MYSHELL_CONFIG="/root/.clawdbot/myshell-config.json"
+if [ -f "$MYSHELL_CONFIG" ]; then
+  API_BASE=$(jq -r '.openapi.host // "https://openapi-test.myshell.fun"' "$MYSHELL_CONFIG")
+  API_KEY=$(jq -r '.openapi.request_headers["x-myshell-openapi-key"] // empty' "$MYSHELL_CONFIG")
+  USER_ID=$(jq -r '.openapi.request_headers["x-myshell-openapi-user-id"] // .myshell_user_id // 3568326' "$MYSHELL_CONFIG")
+else
+  API_BASE="${WIDGET_API_BASE:-https://openapi-test.myshell.fun}"
+  API_KEY="${WIDGET_API_KEY}"
+  USER_ID="${MYSHELL_USER_ID:-3568326}"
+fi
+
+OUTPUT=""
+PROMPT=""
+IMAGE=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -o|--output) OUTPUT="$2"; shift 2 ;;
+    --prompt) PROMPT="$2"; shift 2 ;;
+    --image) IMAGE="$2"; shift 2 ;;
+    -h|--help)
+      echo "Usage: widget-veo3 [options] <prompt>"
+      echo ""
+      echo "Generate high-quality AI videos using Google Veo3 model."
+      echo ""
+      echo "WARNING: This widget costs 120 battery per generation!"
+      echo ""
+      echo "Options:"
+      echo "  -o, --output FILE    Save output to file"
+      echo "  --prompt TEXT        Video description/prompt"
+      echo "  --image URL          Reference image URL (optional, for image-to-video)"
+      echo "  -h, --help           Show this help"
+      echo ""
+      echo "Example:"
+      echo "  widget-veo3 'A cat playing piano in a cozy room'"
+      echo "  widget-veo3 --image 'https://example.com/cat.jpg' 'The cat starts walking'"
+      echo ""
+      echo "Tips for good prompts:"
+      echo "  - Describe the scene, subject, and action clearly"
+      echo "  - Include visual style (cinematic, animated, realistic)"
+      echo "  - Specify camera movement if desired (slow pan, zoom in)"
+      exit 0
+      ;;
+    -*) echo "Unknown option: $1"; exit 1 ;;
+    *) PROMPT="$1"; shift ;;
+  esac
+done
+
+if [ -z "$PROMPT" ]; then
+  echo "Error: No prompt provided"
+  echo "Usage: widget-veo3 [options] <prompt>"
+  exit 1
+fi
+
+if [ -z "$API_KEY" ]; then
+  echo "Error: API key not configured"
+  exit 1
+fi
+
+# Build input JSON
+if [ -n "$IMAGE" ]; then
+  INPUT_JSON=$(jq -n \
+    --arg prompt "$PROMPT" \
+    --arg image "$IMAGE" \
+    '{prompt: $prompt, image: $image}')
+else
+  INPUT_JSON=$(jq -n \
+    --arg prompt "$PROMPT" \
+    '{prompt: $prompt}')
+fi
+
+# Call Widget API
+RESPONSE=$(curl -s -X POST "$API_BASE/public/v2/widget/run" \
+  -H "x-myshell-openapi-key: $API_KEY" \
+  -H "x-myshell-openapi-user-id: $USER_ID" \
+  -H "x-myshell-caller-service: shellclawdbot" \
+  -H "Content-Type: application/json" \
+  --max-time 900 \
+  -d "{\"widget_id\":\"$WIDGET_ID\",\"input\":$(echo "$INPUT_JSON" | jq -Rs .)}")
+
+# Check for error
+if echo "$RESPONSE" | jq -e '.message' > /dev/null 2>&1; then
+  ERROR=$(echo "$RESPONSE" | jq -r '.message // "Unknown error"')
+  echo "Error: $ERROR" >&2
+  exit 1
+fi
+
+# Extract result
+RESULT=$(echo "$RESPONSE" | jq -r '.result // empty')
+if [ -z "$RESULT" ]; then
+  echo "Error: No result in response" >&2
+  echo "$RESPONSE" >&2
+  exit 1
+fi
+
+# Get output URL/data
+OUTPUT_DATA=$(echo "$RESULT" | jq -r '.video_url // empty')
+if [ -z "$OUTPUT_DATA" ]; then
+  OUTPUT_DATA=$(echo "$RESULT" | jq -r 'if type == "string" then . elif .url then .url elif .file_urls[0] then .file_urls[0] else empty end')
+fi
+
+if [ -z "$OUTPUT_DATA" ]; then
+  echo "Error: No output data in result" >&2
+  echo "$RESULT" >&2
+  exit 1
+fi
+
+# Output result
+if [ -n "$OUTPUT" ]; then
+  curl -s -o "$OUTPUT" "$OUTPUT_DATA"
+  echo "$OUTPUT"
+else
+  echo "$OUTPUT_DATA"
+fi

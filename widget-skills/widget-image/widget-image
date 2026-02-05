@@ -1,0 +1,90 @@
+#!/bin/bash
+# widget-image - AI image generation via MyShell Widget (Gemini)
+
+set -e
+
+WIDGET_ID="1991051631495712769"
+
+# Read config from myshell-config.json (set by sandbox manager)
+MYSHELL_CONFIG="/root/.clawdbot/myshell-config.json"
+if [ -f "$MYSHELL_CONFIG" ]; then
+  API_BASE=$(jq -r '.openapi.host // "https://openapi-test.myshell.fun"' "$MYSHELL_CONFIG")
+  API_KEY=$(jq -r '.openapi.request_headers["x-myshell-openapi-key"] // empty' "$MYSHELL_CONFIG")
+  USER_ID=$(jq -r '.openapi.request_headers["x-myshell-openapi-user-id"] // .myshell_user_id // 3568326' "$MYSHELL_CONFIG")
+else
+  # Fallback to environment variables
+  API_BASE="${WIDGET_API_BASE:-https://openapi-test.myshell.fun}"
+  API_KEY="${WIDGET_API_KEY}"
+  USER_ID="${MYSHELL_USER_ID:-3568326}"
+fi
+
+OUTPUT=""
+PROMPT=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -o|--output) OUTPUT="$2"; shift 2 ;;
+    -h|--help)
+      echo "Usage: widget-image [-o output.png] \"prompt\""
+      echo "Generates AI images from text prompts"
+      exit 0
+      ;;
+    -*) echo "Unknown option: $1"; exit 1 ;;
+    *) PROMPT="$1"; shift ;;
+  esac
+done
+
+if [ -z "$PROMPT" ]; then
+  echo "Error: No prompt provided"
+  echo "Usage: widget-image [-o output.png] \"prompt\""
+  exit 1
+fi
+
+if [ -z "$API_KEY" ]; then
+  echo "Error: WIDGET_API_KEY not set"
+  exit 1
+fi
+
+# Build input JSON
+INPUT_JSON=$(jq -n --arg prompt "$PROMPT" '{prompt: $prompt}')
+
+# Call Widget API (longer timeout for image generation)
+RESPONSE=$(curl -s -X POST "$API_BASE/public/v2/widget/run" \
+  -H "x-myshell-openapi-key: $API_KEY" \
+  -H "x-myshell-openapi-user-id: $USER_ID" \
+  -H "x-myshell-caller-service: shellclawdbot" \
+  -H "Content-Type: application/json" \
+  --max-time 300 \
+  -d "{\"widget_id\":\"$WIDGET_ID\",\"input\":$(echo "$INPUT_JSON" | jq -Rs .)}")
+
+# Check for error
+if echo "$RESPONSE" | jq -e '.message' > /dev/null 2>&1; then
+  ERROR=$(echo "$RESPONSE" | jq -r '.message // "Unknown error"')
+  echo "Error: $ERROR" >&2
+  exit 1
+fi
+
+# Extract image URLs from result
+RESULT=$(echo "$RESPONSE" | jq -r '.result // empty')
+if [ -z "$RESULT" ]; then
+  echo "Error: No result in response" >&2
+  echo "$RESPONSE" >&2
+  exit 1
+fi
+
+# Get first image URL from file_urls array
+IMAGE_URL=$(echo "$RESULT" | jq -r '.file_urls[0] // .url // empty')
+if [ -z "$IMAGE_URL" ]; then
+  echo "Error: No image URL in result" >&2
+  echo "$RESULT" >&2
+  exit 1
+fi
+
+# Download or output URL
+if [ -n "$OUTPUT" ]; then
+  curl -s -o "$OUTPUT" "$IMAGE_URL"
+  echo "$OUTPUT"
+else
+  echo "$IMAGE_URL"
+fi
