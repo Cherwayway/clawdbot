@@ -1,43 +1,37 @@
 #!/bin/bash
-# widget-crawler - Web page crawler via MyShell Widget
+# widget-gpt-image - GPT Image Generation via MyShell Widget
 
 set -e
 
-WIDGET_ID="1998950242964926464"
+WIDGET_ID="1912154065390264321"
 
-# Read config from myshell-config.json (set by sandbox manager)
 MYSHELL_CONFIG="/root/.clawdbot/myshell-config.json"
 if [ -f "$MYSHELL_CONFIG" ]; then
   API_BASE=$(jq -r '.openapi.host // "https://openapi-test.myshell.fun"' "$MYSHELL_CONFIG")
   API_KEY=$(jq -r '.openapi.request_headers["x-myshell-openapi-key"] // empty' "$MYSHELL_CONFIG")
   USER_ID=$(jq -r '.openapi.request_headers["x-myshell-openapi-user-id"] // .myshell_user_id // 3568326' "$MYSHELL_CONFIG")
 else
-  # Fallback to environment variables
   API_BASE="${WIDGET_API_BASE:-https://openapi-test.myshell.fun}"
   API_KEY="${WIDGET_API_KEY}"
   USER_ID="${MYSHELL_USER_ID:-3568326}"
 fi
 
-URL=""
-EXTRACT_PROMPT=""
+INPUT=""
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -p|--prompt) EXTRACT_PROMPT="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: widget-crawler [-p extract_prompt] \"url\""
-      echo "Crawls a webpage and extracts content"
+      echo "Usage: widget-gpt-image <input>"
+      echo "GPT Image Generation"
       exit 0
       ;;
     -*) echo "Unknown option: $1"; exit 1 ;;
-    *) URL="$1"; shift ;;
+    *) INPUT="$1"; shift ;;
   esac
 done
 
-if [ -z "$URL" ]; then
-  echo "Error: No URL provided"
-  echo "Usage: widget-crawler \"url\""
+if [ -z "$INPUT" ]; then
+  echo "Error: No input provided"
   exit 1
 fi
 
@@ -46,14 +40,8 @@ if [ -z "$API_KEY" ]; then
   exit 1
 fi
 
-# Build input JSON
-if [ -n "$EXTRACT_PROMPT" ]; then
-  INPUT_JSON=$(jq -n --arg u "$URL" --arg p "$EXTRACT_PROMPT" '{url: $u, extract_prompt: $p}')
-else
-  INPUT_JSON=$(jq -n --arg u "$URL" '{url: $u}')
-fi
+INPUT_JSON=$(jq -n --arg v "$INPUT" '{prompt: $v}')
 
-# Call Widget API
 RESPONSE=$(curl -s -X POST "$API_BASE/public/v2/widget/run" \
   -H "x-myshell-openapi-key: $API_KEY" \
   -H "x-myshell-openapi-user-id: $USER_ID" \
@@ -62,33 +50,16 @@ RESPONSE=$(curl -s -X POST "$API_BASE/public/v2/widget/run" \
   --max-time 120 \
   -d "{\"widget_id\":\"$WIDGET_ID\",\"input\":$(echo "$INPUT_JSON" | jq -Rs .)}")
 
-# Check for error
 if echo "$RESPONSE" | jq -e '.message' > /dev/null 2>&1; then
   ERROR=$(echo "$RESPONSE" | jq -r '.message // "Unknown error"')
   echo "Error: $ERROR" >&2
   exit 1
 fi
 
-# Extract result
 RESULT=$(echo "$RESPONSE" | jq -r '.result // empty')
 if [ -z "$RESULT" ]; then
   echo "Error: No result in response" >&2
-  echo "$RESPONSE" >&2
   exit 1
 fi
 
-# Check success flag
-SUCCESS=$(echo "$RESULT" | jq -r '.success // true')
-if [ "$SUCCESS" = "false" ]; then
-  ERROR_MSG=$(echo "$RESULT" | jq -r '.error_message // "Crawl failed"')
-  echo "Error: $ERROR_MSG" >&2
-  exit 1
-fi
-
-# Output crawl result
-CRAWL_RESULT=$(echo "$RESULT" | jq -r '.result // .content // empty')
-if [ -n "$CRAWL_RESULT" ]; then
-  echo "$CRAWL_RESULT"
-else
-  echo "$RESULT"
-fi
+echo "$RESULT" | jq -r '.' 2>/dev/null || echo "$RESULT"
