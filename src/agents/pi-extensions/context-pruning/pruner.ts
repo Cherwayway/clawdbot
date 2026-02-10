@@ -261,12 +261,30 @@ export function pruneContextMessages(params: {
   const totalCharsBefore = estimateContextChars(messages);
   let totalChars = totalCharsBefore;
   let ratio = totalChars / charWindow;
+
+  // Count toolResult messages in the prunable range for diagnostics
+  let totalToolResults = 0;
+  let toolResultsNotPrunable = 0;
+  let toolResultsWithImages = 0;
+  for (let i = pruneStartIndex; i < cutoffIndex; i++) {
+    const msg = messages[i];
+    if (msg?.role === "toolResult") {
+      totalToolResults++;
+      if (!isToolPrunable(msg.toolName)) toolResultsNotPrunable++;
+      if (hasImageBlocks(msg.content)) toolResultsWithImages++;
+    }
+  }
+  console.log(`[context-pruning-prn] charWindow=${charWindow}, totalChars=${totalChars}, ratio=${ratio.toFixed(3)}, softTrimRatio=${settings.softTrimRatio}, hardClearRatio=${settings.hardClearRatio}`);
+  console.log(`[context-pruning-prn] pruneRange=[${pruneStartIndex},${cutoffIndex}), totalMessages=${messages.length}, toolResults=${totalToolResults} (notPrunable=${toolResultsNotPrunable}, withImages=${toolResultsWithImages})`);
+
   if (ratio < settings.softTrimRatio) {
+    console.log("[context-pruning-prn] SKIP: ratio < softTrimRatio");
     return messages;
   }
 
   const prunableToolIndexes: number[] = [];
   let next: AgentMessage[] | null = null;
+  let softTrimCount = 0;
 
   for (let i = pruneStartIndex; i < cutoffIndex; i++) {
     const msg = messages[i];
@@ -289,6 +307,7 @@ export function pruneContextMessages(params: {
       continue;
     }
 
+    softTrimCount++;
     const beforeChars = estimateMessageChars(msg);
     const afterChars = estimateMessageChars(updated as unknown as AgentMessage);
     totalChars += afterChars - beforeChars;
@@ -298,12 +317,16 @@ export function pruneContextMessages(params: {
     next[i] = updated as unknown as AgentMessage;
   }
 
+  console.log(`[context-pruning-prn] softTrim: prunableTools=${prunableToolIndexes.length}, softTrimmed=${softTrimCount}`);
+
   const outputAfterSoftTrim = next ?? messages;
   ratio = totalChars / charWindow;
   if (ratio < settings.hardClearRatio) {
+    console.log(`[context-pruning-prn] after softTrim: ratio=${ratio.toFixed(3)} < hardClearRatio=${settings.hardClearRatio}, stopping`);
     return outputAfterSoftTrim;
   }
   if (!settings.hardClear.enabled) {
+    console.log("[context-pruning-prn] hardClear disabled, stopping");
     return outputAfterSoftTrim;
   }
 
@@ -315,10 +338,13 @@ export function pruneContextMessages(params: {
     }
     prunableToolChars += estimateMessageChars(msg);
   }
+  console.log(`[context-pruning-prn] hardClear check: prunableToolChars=${prunableToolChars}, minPrunableToolChars=${settings.minPrunableToolChars}`);
   if (prunableToolChars < settings.minPrunableToolChars) {
+    console.log("[context-pruning-prn] SKIP hardClear: not enough prunable chars");
     return outputAfterSoftTrim;
   }
 
+  let hardClearCount = 0;
   for (const i of prunableToolIndexes) {
     if (ratio < settings.hardClearRatio) {
       break;
@@ -328,6 +354,7 @@ export function pruneContextMessages(params: {
       continue;
     }
 
+    hardClearCount++;
     const beforeChars = estimateMessageChars(msg);
     const cleared: ToolResultMessage = {
       ...msg,
@@ -342,5 +369,6 @@ export function pruneContextMessages(params: {
     ratio = totalChars / charWindow;
   }
 
+  console.log(`[context-pruning-prn] hardCleared=${hardClearCount}, finalRatio=${ratio.toFixed(3)}`);
   return next ?? messages;
 }

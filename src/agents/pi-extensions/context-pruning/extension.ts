@@ -39,12 +39,11 @@ export default function contextPruningExtension(api: ExtensionAPI): void {
     });
 
     if (next === event.messages) {
-      console.log("[context-pruning-ext] pruner returned same messages (no change)");
+      console.log("[context-pruning-ext] pruner returned same array ref (no modification)");
       return undefined;
     }
 
-    const prunedCount = event.messages.length - next.length;
-    console.log(`[context-pruning-ext] PRUNED: ${prunedCount} messages removed/trimmed`);
+    console.log(`[context-pruning-ext] pruner modified context (before=${event.messages.length}, after=${next.length} messages)`);
 
     if (runtime.settings.mode === "cache-ttl") {
       runtime.lastCacheTouchAt = Date.now();
