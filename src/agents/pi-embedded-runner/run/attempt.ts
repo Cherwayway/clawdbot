@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import { streamSimple } from "@mariozechner/pi-ai";
-import { createAgentSession, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";
 import fs from "node:fs/promises";
 import os from "node:os";
 import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
@@ -439,14 +439,26 @@ export async function runEmbeddedAttempt(
         minReserveTokens: resolveCompactionReserveTokensFloor(params.config),
       });
 
-      // Call for side effects (sets compaction/pruning runtime state)
-      buildEmbeddedExtensionPaths({
+      // Build extension paths AND set runtime state (compaction/pruning)
+      const embeddedExtensionPaths = buildEmbeddedExtensionPaths({
         cfg: params.config,
         sessionManager,
         provider: params.provider,
         modelId: params.modelId,
         model: params.model,
       });
+
+      // Create resource loader with extension paths so Pi SDK can load them
+      let resourceLoader: InstanceType<typeof DefaultResourceLoader> | undefined;
+      if (embeddedExtensionPaths.length > 0) {
+        resourceLoader = new DefaultResourceLoader({
+          cwd: resolvedWorkspace,
+          agentDir,
+          settingsManager,
+          additionalExtensionPaths: embeddedExtensionPaths,
+        });
+        await resourceLoader.reload();
+      }
 
       const { builtInTools, customTools } = splitSdkTools({
         tools,
@@ -481,6 +493,7 @@ export async function runEmbeddedAttempt(
         customTools: allCustomTools,
         sessionManager,
         settingsManager,
+        ...(resourceLoader ? { resourceLoader } : {}),
       }));
       applySystemPromptOverrideToSession(session, systemPromptText);
       if (!session) {
