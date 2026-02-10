@@ -36,6 +36,7 @@ export type AgentCliOpts = {
   agent?: string;
   to?: string;
   sessionId?: string;
+  sessionKey?: string;
   thinking?: string;
   verbose?: string;
   json?: boolean;
