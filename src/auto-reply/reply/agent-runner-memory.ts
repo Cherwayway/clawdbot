@@ -76,8 +76,17 @@ export async function runMemoryFlushIfNeeded(params: {
     });
 
   if (!shouldFlushMemory) {
+    const totalTokens = params.sessionEntry?.totalTokens ?? 0;
+    const ctxTokens = resolveMemoryFlushContextWindowTokens({
+      modelId: params.followupRun.run.model ?? params.defaultModel,
+      agentCfgContextTokens: params.agentCfgContextTokens,
+    });
+    const threshold = ctxTokens - memoryFlushSettings.reserveTokensFloor - memoryFlushSettings.softThresholdTokens;
+    console.log(`[memory-flush] SKIP: totalTokens=${totalTokens}, threshold=${threshold}, ctxWindow=${ctxTokens}, writable=${memoryFlushWritable}, isHeartbeat=${params.isHeartbeat}`);
     return params.sessionEntry;
   }
+
+  console.log(`[memory-flush] TRIGGERED: totalTokens=${params.sessionEntry?.totalTokens}, compactionCount=${params.sessionEntry?.compactionCount}, memoryFlushCompactionCount=${params.sessionEntry?.memoryFlushCompactionCount}`);
 
   let activeSessionEntry = params.sessionEntry;
   const activeSessionStore = params.sessionStore;
