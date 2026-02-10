@@ -274,7 +274,7 @@ export function pruneContextMessages(params: {
       if (hasImageBlocks(msg.content)) toolResultsWithImages++;
     }
   }
-  console.log(`[context-pruning-prn] charWindow=${charWindow}, totalChars=${totalChars}, ratio=${ratio.toFixed(3)}, softTrimRatio=${settings.softTrimRatio}, hardClearRatio=${settings.hardClearRatio}`);
+  console.log(`[context-pruning-prn] charWindow=${charWindow}, totalChars=${totalChars}, ratio=${ratio.toFixed(4)}, softTrimRatio=${settings.softTrimRatio}, hardClearRatio=${settings.hardClearRatio}, CHARS_PER_TOKEN=${CHARS_PER_TOKEN_ESTIMATE} (NOTE: inaccurate for CJK text)`);
   console.log(`[context-pruning-prn] pruneRange=[${pruneStartIndex},${cutoffIndex}), totalMessages=${messages.length}, toolResults=${totalToolResults} (notPrunable=${toolResultsNotPrunable}, withImages=${toolResultsWithImages})`);
 
   if (ratio < settings.softTrimRatio) {

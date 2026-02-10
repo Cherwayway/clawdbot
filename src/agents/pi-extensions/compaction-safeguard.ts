@@ -159,7 +159,10 @@ function formatFileOperations(readFiles: string[], modifiedFiles: string[]): str
 }
 
 export default function compactionSafeguardExtension(api: ExtensionAPI): void {
+  console.log("[compaction-safeguard] extension registered");
   api.on("session_before_compact", async (event, ctx) => {
+    console.log(`[compaction-safeguard] session_before_compact fired, tokensBefore=${event.preparation.tokensBefore}, messagesToSummarize=${event.preparation.messagesToSummarize.length}`);
+
     const { preparation, customInstructions, signal } = event;
     const { readFiles, modifiedFiles } = computeFileLists(preparation.fileOps);
     const fileOpsSummary = formatFileOperations(readFiles, modifiedFiles);
