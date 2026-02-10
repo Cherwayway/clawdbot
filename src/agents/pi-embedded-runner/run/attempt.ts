@@ -447,6 +447,7 @@ export async function runEmbeddedAttempt(
         modelId: params.modelId,
         model: params.model,
       });
+      log.info(`[context-pruning] embeddedExtensionPaths=${JSON.stringify(embeddedExtensionPaths)}, provider=${params.provider}, modelId=${params.modelId}`);
 
       // Create resource loader with extension paths so Pi SDK can load them
       let resourceLoader: InstanceType<typeof DefaultResourceLoader> | undefined;
@@ -458,6 +459,10 @@ export async function runEmbeddedAttempt(
           additionalExtensionPaths: embeddedExtensionPaths,
         });
         await resourceLoader.reload();
+        const extResult = resourceLoader.getExtensions();
+        log.info(`[context-pruning] resourceLoader loaded extensions: ${extResult.extensions.map((e: { name?: string; path?: string }) => e.name || e.path).join(', ')}`);
+      } else {
+        log.warn('[context-pruning] no extension paths returned — pruning extension will NOT load');
       }
 
       const { builtInTools, customTools } = splitSdkTools({

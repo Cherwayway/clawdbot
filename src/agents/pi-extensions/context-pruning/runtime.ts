@@ -17,6 +17,7 @@ export function setContextPruningRuntime(
   value: ContextPruningRuntimeValue | null,
 ): void {
   if (!sessionManager || typeof sessionManager !== "object") {
+    console.log("[context-pruning-rt] setRuntime: sessionManager invalid, skipping");
     return;
   }
 
@@ -27,14 +28,18 @@ export function setContextPruningRuntime(
   }
 
   REGISTRY.set(key, value);
+  console.log(`[context-pruning-rt] setRuntime: stored in WeakMap, lastCacheTouchAt=${value.lastCacheTouchAt}, contextWindowTokens=${value.contextWindowTokens}`);
 }
 
 export function getContextPruningRuntime(
   sessionManager: unknown,
 ): ContextPruningRuntimeValue | null {
   if (!sessionManager || typeof sessionManager !== "object") {
+    console.log("[context-pruning-rt] getRuntime: sessionManager invalid");
     return null;
   }
 
-  return REGISTRY.get(sessionManager) ?? null;
+  const val = REGISTRY.get(sessionManager) ?? null;
+  console.log(`[context-pruning-rt] getRuntime: WeakMap lookup ${val ? "HIT" : "MISS"}`);
+  return val;
 }
