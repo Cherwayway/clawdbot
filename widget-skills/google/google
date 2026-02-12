@@ -1,0 +1,42 @@
+#!/bin/bash
+# google - Google Calendar/Gmail SKILL
+# Usage: google calendar list | google gmail list --unread | google gmail send --recipient x --subject y --body z
+#        google auth check | google auth setup [--scopes calendar,gmail-read,gmail-send]
+# Calls organics OAuth proxy with tg2app_bot_id=100001
+
+set -e
+
+MYSHELL_CONFIG="/root/.clawdbot/myshell-config.json"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+
+# Try installed location first, then fallback to script directory
+if [ -f "/opt/widget-skills/google/google-api.py" ]; then
+  PYTHON_SCRIPT="/opt/widget-skills/google/google-api.py"
+elif [ -f "$SCRIPT_DIR/google-api.py" ]; then
+  PYTHON_SCRIPT="$SCRIPT_DIR/google-api.py"
+else
+  echo "Error: google-api.py not found"
+  exit 1
+fi
+
+# Read config
+if [ -f "$MYSHELL_CONFIG" ]; then
+  USER_ID=$(python3 -c "import json; c=json.load(open('$MYSHELL_CONFIG')); print(c.get('myshell_user_id', c.get('openapi',{}).get('request_headers',{}).get('x-myshell-openapi-user-id','')))")
+  # OAuth API base is separate from widget API base (staging: api.myshell.fun, prod: api.myshell.ai)
+  API_BASE=$(python3 -c "import json; c=json.load(open('$MYSHELL_CONFIG')); print(c.get('oauth_api_base','https://api.myshell.fun'))")
+else
+  echo "Error: $MYSHELL_CONFIG not found. Google SKILL requires MyShell configuration."
+  exit 1
+fi
+
+if [ -z "$USER_ID" ]; then
+  echo "Error: myshell_user_id not found in config"
+  exit 1
+fi
+
+echo "[google] Using USER_ID: $USER_ID, API_BASE: $API_BASE" >&2
+
+exec python3 "$PYTHON_SCRIPT" \
+  --api-base "$API_BASE" \
+  --user-id "$USER_ID" \
+  "$@"
