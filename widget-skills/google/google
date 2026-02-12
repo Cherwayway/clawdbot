@@ -22,8 +22,17 @@ fi
 # Read config
 if [ -f "$MYSHELL_CONFIG" ]; then
   USER_ID=$(python3 -c "import json; c=json.load(open('$MYSHELL_CONFIG')); print(c.get('myshell_user_id', c.get('openapi',{}).get('request_headers',{}).get('x-myshell-openapi-user-id','')))")
-  # OAuth API base is separate from widget API base (staging: api.myshell.fun, prod: api.myshell.ai)
-  API_BASE=$(python3 -c "import json; c=json.load(open('$MYSHELL_CONFIG')); print(c.get('oauth_api_base','https://api.myshell.fun'))")
+  # OAuth API base: infer from openapi.host (same env detection as other widgets)
+  # openapi.myshell.ai (prod) → api.myshell.ai | openapi-test.myshell.fun (staging) → api.myshell.fun
+  API_BASE=$(python3 -c "
+import json
+c = json.load(open('$MYSHELL_CONFIG'))
+base = c.get('oauth_api_base', '')
+if not base:
+    host = c.get('openapi', {}).get('host', '')
+    base = 'https://api.myshell.ai' if 'myshell.ai' in host else 'https://api.myshell.fun'
+print(base)
+")
 else
   echo "Error: $MYSHELL_CONFIG not found. Google SKILL requires MyShell configuration."
   exit 1
