@@ -1,7 +1,7 @@
 ---
 name: google
 description: Google Calendar and Gmail integration via OAuth. View/create calendar events, read/send emails.
-metadata: {"clawdbot":{"emoji":"📅","requires":{"bins":["python3","google"]}}}
+metadata: {"clawdbot":{"emoji":"📅","requires":{"bins":["python3","google"]},"high_risk_actions":["gmail send","calendar delete"]}}
 ---
 
 # Google Services (Calendar + Gmail)
