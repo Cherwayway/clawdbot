@@ -1,3 +1,4 @@
+// System prompt builder — playbook index, confirm gates, execution hooks
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
